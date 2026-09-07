@@ -64,44 +64,47 @@ async function* streamClaude({ topic, persona, transcript, key }, signal) {
   }
 }
 
-export default async function handler(request) {
-  if (request.method === 'GET') {
-    return Response.json({ models: { gemini: GEMINI_MODEL, claude: CLAUDE_MODEL }, needsCode: Boolean(process.env.ACCESS_CODE) });
+export default async function handler(req, res) {
+  if (req.method === 'GET') {
+    return res.status(200).json({ models: { gemini: GEMINI_MODEL, claude: CLAUDE_MODEL }, needsCode: Boolean(process.env.ACCESS_CODE) });
   }
-  if (request.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+  if (req.method !== 'POST') return res.status(405).send('Method not allowed');
 
-  let body;
-  try { body = await request.json(); } catch { return new Response('Geçersiz istek', { status: 400 }); }
+  let body = req.body;
+  if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = null; } }
   const { who, topic, persona, transcript, keys = {} } = body || {};
+  if (!['gemini', 'claude'].includes(who) || !topic || !Array.isArray(transcript)) {
+    return res.status(400).send('Eksik alan: who, topic, transcript');
+  }
+
   const ownKey = (keys[who] || '').trim();
   // Kendi anahtarını getiren giriş kodundan muaf; site sahibinin anahtarı için kod zorunlu (tanımlıysa).
-  if (process.env.ACCESS_CODE && !ownKey && request.headers.get('x-access-code') !== process.env.ACCESS_CODE) {
-    return new Response('Giriş kodu geçersiz. Kurulum bölümünden kodu gir ya da kendi API anahtarını kullan.', { status: 401 });
+  if (process.env.ACCESS_CODE && !ownKey && req.headers['x-access-code'] !== process.env.ACCESS_CODE) {
+    return res.status(401).send('Giriş kodu geçersiz. Kurulum bölümünden kodu gir ya da kendi API anahtarını kullan.');
   }
-  if (!['gemini', 'claude'].includes(who) || !topic || !Array.isArray(transcript)) {
-    return new Response('Eksik alan: who, topic, transcript', { status: 400 });
+  if (!ownKey && !(who === 'gemini' ? process.env.GEMINI_API_KEY : process.env.CLAUDE_API_KEY)) {
+    return res.status(500).send(`${NAMES[who]} için API anahtarı tanımlı değil (Vercel ortam değişkenleri).`);
   }
+
+  const ac = new AbortController();
+  req.on('close', () => ac.abort());
+
+  res.status(200);
+  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('X-Accel-Buffering', 'no');
+  const send = (obj) => res.write(JSON.stringify(obj) + '\n');
 
   const gen = who === 'gemini'
-    ? streamGemini({ topic, persona, transcript, key: ownKey }, request.signal)
-    : streamClaude({ topic, persona, transcript, key: ownKey }, request.signal);
+    ? streamGemini({ topic, persona, transcript, key: ownKey }, ac.signal)
+    : streamClaude({ topic, persona, transcript, key: ownKey }, ac.signal);
 
-  const enc = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      const send = (obj) => controller.enqueue(enc.encode(JSON.stringify(obj) + '\n'));
-      try {
-        for await (const piece of gen) send({ t: piece });
-        send({ done: true });
-      } catch (err) {
-        if (!request.signal?.aborted) send({ error: `${NAMES[who]} hatası: ${err.message}` });
-      } finally {
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-cache' },
-  });
+  try {
+    for await (const piece of gen) send({ t: piece });
+    send({ done: true });
+  } catch (err) {
+    if (!ac.signal.aborted) send({ error: `${NAMES[who]} hatası: ${err.message}` });
+  } finally {
+    res.end();
+  }
 }

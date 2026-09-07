@@ -28,10 +28,11 @@ function messageParagraphs(m) {
   );
 }
 
-export default async function handler(request) {
-  if (request.method !== 'POST') return new Response('Method not allowed', { status: 405 });
-  let body;
-  try { body = await request.json(); } catch { return new Response('Geçersiz istek', { status: 400 }); }
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).send('Method not allowed');
+  let body = req.body;
+  if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = null; } }
+  if (!body) return res.status(400).send('Geçersiz istek');
   const { topic = '', personas = {}, transcript = [], models = {} } = body || {};
 
   const date = new Date().toLocaleString('tr-TR', { dateStyle: 'long', timeStyle: 'short', timeZone: 'Europe/Istanbul' });
@@ -59,10 +60,7 @@ export default async function handler(request) {
 
   const buf = await Packer.toBuffer(doc);
   const fname = `yuvarlak-masa-${new Date().toISOString().slice(0, 10)}.docx`;
-  return new Response(buf, {
-    headers: {
-      'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'Content-Disposition': `attachment; filename="${fname}"`,
-    },
-  });
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  res.setHeader('Content-Disposition', `attachment; filename="${fname}"`);
+  return res.status(200).send(buf);
 }

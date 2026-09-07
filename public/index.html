@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yuvarlak Masa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #dfe5e8;
+    --paper: #fbfbf9;
+    --ink: #16222b;
+    --muted: #6b7880;
+    --rule: #c9d2d7;
+    --gemini: #1f5fa8;
+    --claude: #2e6b4a;
+    --mod: #16222b;
+    --serif: "Newsreader", Georgia, "Times New Roman", serif;
+    --sans: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    min-height: 100dvh;
+  }
+
+  /* ---------- Üst: kurulum ---------- */
+  header {
+    background: var(--paper);
+    border-bottom: 1px solid var(--rule);
+    padding: 14px 20px;
+  }
+  header h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 22px;
+    margin: 0 0 10px;
+    letter-spacing: -0.01em;
+  }
+  #setup { display: grid; gap: 8px; grid-template-columns: 1fr; max-width: 980px; }
+  #setup textarea, #setup input {
+    width: 100%;
+    font: 14px/1.4 var(--sans);
+    padding: 8px 10px;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    background: #fff;
+    color: var(--ink);
+    resize: vertical;
+  }
+  #setup textarea:focus, #setup input:focus, button:focus-visible, #modText:focus {
+    outline: 2px solid var(--gemini);
+    outline-offset: 1px;
+  }
+  .personas { display: grid; gap: 8px; grid-template-columns: 1fr 1fr; }
+  .personas label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 3px; }
+  .personas label b { color: var(--ink); font-weight: 600; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #models { font-size: 12px; color: var(--muted); margin-left: auto; }
+  #toggleSetup { margin-left: auto; }
+  header.collapsed #setup { display: none; }
+  header.collapsed h1 { margin-bottom: 0; }
+  #access { margin-top: 4px; }
+  #access summary { cursor: pointer; font-size: 13px; color: var(--muted); padding: 4px 0; }
+  #access .personas { margin-top: 8px; }
+  #topicLine { font-family: var(--serif); font-size: 16px; color: var(--muted); font-style: italic; margin-top: 4px; display: none; }
+  header.collapsed #topicLine { display: block; }
+
+  /* ---------- Orta: transkript ---------- */
+  main { overflow-y: auto; padding: 24px 20px 32px; }
+  #transcript {
+    max-width: 780px;
+    margin: 0 auto;
+    background: var(--paper);
+    padding: 28px 32px;
+    min-height: 200px;
+    box-shadow: 0 1px 0 var(--rule);
+  }
+  #transcript:empty::before {
+    content: "Konuyu yaz, tarafları tanımla ve masayı kur. Sonra kimin konuşacağına sen karar verirsin.";
+    color: var(--muted);
+    font-family: var(--serif);
+    font-size: 17px;
+    display: block;
+    text-align: center;
+    padding: 40px 0;
+  }
+  .msg {
+    display: grid;
+    grid-template-columns: 96px 1fr;
+    gap: 14px;
+    padding: 14px 0;
+    border-top: 1px solid var(--rule);
+  }
+  .msg:first-child { border-top: 0; padding-top: 0; }
+  .who {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 16px;
+    line-height: 1.55;
+    padding-top: 1px;
+  }
+  .msg[data-who="gemini"] .who { color: var(--gemini); }
+  .msg[data-who="claude"] .who { color: var(--claude); }
+  .msg[data-who="moderator"] .who { color: var(--mod); }
+  .msg[data-who="moderator"] .who::after { content: " ▸"; opacity: .5; }
+  .text {
+    font-family: var(--serif);
+    font-size: 17.5px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .msg[data-who="moderator"] .text { font-style: italic; }
+  .msg.live .text::after {
+    content: "";
+    display: inline-block;
+    width: 8px; height: 17px;
+    background: currentColor;
+    margin-left: 3px;
+    vertical-align: -3px;
+    animation: blink 1s steps(2) infinite;
+  }
+  @keyframes blink { to { visibility: hidden; } }
+  @media (prefers-reduced-motion: reduce) { .msg.live .text::after { animation: none; } }
+  .empty-note { color: var(--muted); font-size: 13px; }
+
+  /* ---------- Alt: moderatör kürsüsü ---------- */
+  footer {
+    background: var(--paper);
+    border-top: 1px solid var(--rule);
+    padding: 12px 20px calc(12px + env(safe-area-inset-bottom));
+    position: sticky; bottom: 0;
+  }
+  .podium { max-width: 780px; margin: 0 auto; display: grid; gap: 8px; }
+  .turns { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; }
+  button {
+    font: 500 14px/1 var(--sans);
+    padding: 11px 14px;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    background: #fff;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.speak-gemini { border-color: var(--gemini); color: var(--gemini); }
+  button.speak-claude { border-color: var(--claude); color: var(--claude); }
+  button.speak-gemini:not(:disabled):hover { background: var(--gemini); color: #fff; }
+  button.speak-claude:not(:disabled):hover { background: var(--claude); color: #fff; }
+  button.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  button.danger { color: #9b2c2c; border-color: #d9b4b4; }
+  .modline { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+  #modText {
+    font: 15px/1.4 var(--serif);
+    padding: 10px 12px;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    background: #fff;
+    resize: none;
+    min-height: 44px;
+    max-height: 140px;
+  }
+  .tools { display: flex; gap: 8px; justify-content: flex-end; }
+  .tools button { padding: 7px 10px; font-size: 13px; }
+  #status { font-size: 13px; color: var(--muted); align-self: center; margin-right: auto; }
+  #status.err { color: #9b2c2c; }
+
+  @media (max-width: 640px) {
+    .personas { grid-template-columns: 1fr; }
+    #transcript { padding: 18px 16px; }
+    .msg { grid-template-columns: 1fr; gap: 4px; }
+    .who { font-size: 14px; }
+    .text { font-size: 16.5px; }
+    .turns { grid-template-columns: 1fr 1fr; }
+    .turns .stop { grid-column: 1 / -1; }
+  }
+</style>
+</head>
+<body>
+
+<header id="header">
+  <div class="row">
+    <h1>Yuvarlak Masa</h1>
+    <span id="models"></span>
+    <button id="toggleSetup" type="button" hidden>Kurulumu göster</button>
+  </div>
+  <div id="topicLine"></div>
+  <div id="setup">
+    <textarea id="topic" rows="2" placeholder="Tartışma konusu — moderatörün açılış sorusu olarak masaya konur"></textarea>
+    <div class="personas">
+      <div>
+        <label><b>Gemini</b> rolü</label>
+        <textarea id="geminiPersona" rows="3" placeholder="Örn. Teknoloji iyimseri bir eğitim ekonomisti. Verilerle konuşur, iddialı ama kibar."></textarea>
+      </div>
+      <div>
+        <label><b>Claude</b> rolü</label>
+        <textarea id="claudePersona" rows="3" placeholder="Örn. Şüpheci bir eğitim sosyoloğu. Karşı örnekler arar, ölçme sorunlarını vurgular."></textarea>
+      </div>
+    </div>
+    <div class="row">
+      <button id="setupBtn" class="primary" type="button">Masayı kur</button>
+      <span class="empty-note">Kurulum transkripti sıfırlar.</span>
+    </div>
+    <details id="access">
+      <summary>Erişim ayarları</summary>
+      <div class="personas">
+        <div>
+          <label>Giriş kodu <span class="empty-note">(site sahibinin anahtarlarıyla kullanmak için)</span></label>
+          <input id="accessCode" type="password" autocomplete="off" placeholder="Site sahibinden aldığın kod">
+        </div>
+        <div>
+          <label>Kendi Gemini API anahtarın <span class="empty-note">(isteğe bağlı)</span></label>
+          <input id="ownGemini" type="password" autocomplete="off" placeholder="AIza…">
+        </div>
+        <div>
+          <label>Kendi Claude API anahtarın <span class="empty-note">(isteğe bağlı)</span></label>
+          <input id="ownClaude" type="password" autocomplete="off" placeholder="sk-ant-…">
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button id="saveAccess" type="button">Kaydet</button>
+          <span id="accessNote" class="empty-note"></span>
+        </div>
+      </div>
+      <p class="empty-note" style="margin:8px 0 0">Anahtarlar yalnızca bu tarayıcıda saklanır ve her istekte doğrudan ilgili modele iletilir; sunucuda tutulmaz.</p>
+    </details>
+  </div>
+</header>
+
+<main><div id="transcript"></div></main>
+
+<footer>
+  <div class="podium">
+    <div class="turns">
+      <button class="speak-gemini" data-who="gemini" type="button" disabled>Gemini konuşsun</button>
+      <button class="speak-claude" data-who="claude" type="button" disabled>Claude konuşsun</button>
+      <button id="stopBtn" class="stop danger" type="button" disabled>Kes</button>
+    </div>
+    <div class="modline">
+      <textarea id="modText" placeholder="Moderatör notu: soru sor, yönlendir, özetle… (Enter gönderir, Shift+Enter satır)"></textarea>
+      <button id="modBtn" type="button" disabled>Masaya koy</button>
+    </div>
+    <div class="tools">
+      <span id="status"></span>
+      <button id="undoBtn" type="button" disabled>Son mesajı geri al</button>
+      <button id="exportBtn" type="button" disabled>Markdown indir</button>
+      <button id="wordBtn" type="button" disabled>Word olarak indir</button>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const $ = (s) => document.querySelector(s);
+  const NAMES = { gemini: 'Gemini', claude: 'Claude', moderator: 'Moderatör' };
+  const STORE = 'yuvarlak-masa-v2';
+
+  const header = $('#header'), transcriptEl = $('#transcript'), main = document.querySelector('main');
+  const speakBtns = [...document.querySelectorAll('button[data-who]')];
+  const stopBtn = $('#stopBtn'), modBtn = $('#modBtn'), modText = $('#modText');
+  const undoBtn = $('#undoBtn'), exportBtn = $('#exportBtn'), wordBtn = $('#wordBtn'), statusEl = $('#status');
+  const ACCESS = 'yuvarlak-masa-access';
+  let access = { code: '', gemini: '', claude: '' };
+  let models = {};
+  try { access = { ...access, ...JSON.parse(localStorage.getItem(ACCESS) || '{}') }; } catch {}
+
+  let state = { topic: '', personas: { gemini: '', claude: '' }, transcript: [] };
+  let ready = false, busy = false, abort = null;
+
+  // ----- kalıcılık -----
+  function save() { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch {} }
+  function load() {
+    try { const s = JSON.parse(localStorage.getItem(STORE)); if (s && s.topic) { state = s; return true; } } catch {}
+    return false;
+  }
+
+  // ----- durum & butonlar -----
+  function setStatus(text, isErr = false) { statusEl.textContent = text; statusEl.classList.toggle('err', isErr); }
+  function refreshButtons() {
+    speakBtns.forEach((b) => (b.disabled = !ready || busy));
+    stopBtn.disabled = !busy;
+    modBtn.disabled = !ready || busy;
+    undoBtn.disabled = !ready || busy || state.transcript.length <= 1;
+    exportBtn.disabled = state.transcript.length === 0;
+    wordBtn.disabled = busy || state.transcript.length === 0;
+  }
+
+  // ----- transkript çizimi -----
+  function scrollDown() { main.scrollTop = main.scrollHeight; }
+  function renderMsg(m, isLive = false) {
+    const el = document.createElement('div');
+    el.className = 'msg' + (isLive ? ' live' : '');
+    el.dataset.who = m.who;
+    el.innerHTML = `<div class="who"></div><div class="text"></div>`;
+    el.querySelector('.who').textContent = NAMES[m.who];
+    el.querySelector('.text').textContent = m.text;
+    transcriptEl.appendChild(el);
+    scrollDown();
+    return el;
+  }
+  function renderAll() { transcriptEl.innerHTML = ''; state.transcript.forEach((m) => renderMsg(m)); refreshButtons(); }
+  function collapseHeader(topic) {
+    $('#topicLine').textContent = topic;
+    header.classList.add('collapsed');
+    $('#toggleSetup').hidden = false;
+    $('#toggleSetup').textContent = 'Kurulumu göster';
+  }
+
+  // ----- kurulum -----
+  $('#setupBtn').onclick = () => {
+    const topic = $('#topic').value.trim();
+    if (!topic) { setStatus('Bir konu yazmadan masa kurulmaz.', true); $('#topic').focus(); return; }
+    state = {
+      topic,
+      personas: { gemini: $('#geminiPersona').value.trim(), claude: $('#claudePersona').value.trim() },
+      transcript: [{ who: 'moderator', text: topic, ts: Date.now() }],
+    };
+    ready = true; save(); renderAll(); collapseHeader(topic);
+    setStatus('Masa kuruldu. Söz kimde?');
+  };
+  $('#toggleSetup').onclick = () => {
+    const c = header.classList.toggle('collapsed');
+    $('#toggleSetup').textContent = c ? 'Kurulumu göster' : 'Kurulumu gizle';
+  };
+
+  // ----- konuşturma (fetch akışı) -----
+  async function speak(who) {
+    if (!ready || busy) return;
+    busy = true; abort = new AbortController(); refreshButtons();
+    setStatus(`${NAMES[who]} konuşuyor…`);
+    const el = renderMsg({ who, text: '' }, true);
+    let text = '';
+    try {
+      const res = await fetch('/api/speak', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-access-code': access.code || '' },
+        body: JSON.stringify({ who, topic: state.topic, persona: state.personas[who], transcript: state.transcript,
+          keys: { gemini: access.gemini, claude: access.claude } }),
+        signal: abort.signal,
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const reader = res.body.getReader(), dec = new TextDecoder();
+      let buf = '';
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n'); buf = lines.pop();
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const msg = JSON.parse(line);
+          if (msg.t) { text += msg.t; el.querySelector('.text').textContent = text; scrollDown(); }
+          if (msg.error) throw new Error(msg.error);
+        }
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') setStatus(err.message, true);
+    }
+    text = text.trim();
+    if (text) {
+      el.classList.remove('live');
+      state.transcript.push({ who, text, ts: Date.now() });
+      save();
+      if (!statusEl.classList.contains('err')) setStatus('Söz kimde?');
+    } else el.remove();
+    busy = false; abort = null; refreshButtons();
+  }
+  speakBtns.forEach((b) => (b.onclick = () => speak(b.dataset.who)));
+  stopBtn.onclick = () => abort?.abort();
+
+  // ----- moderatör -----
+  function sendModerator() {
+    const text = modText.value.trim();
+    if (!text || !ready || busy) return;
+    const m = { who: 'moderator', text, ts: Date.now() };
+    state.transcript.push(m); save(); renderMsg(m); refreshButtons();
+    modText.value = ''; modText.style.height = '';
+  }
+  modBtn.onclick = sendModerator;
+  modText.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendModerator(); } });
+  modText.addEventListener('input', () => { modText.style.height = 'auto'; modText.style.height = Math.min(modText.scrollHeight, 140) + 'px'; });
+
+  undoBtn.onclick = () => { if (busy || state.transcript.length <= 1) return; state.transcript.pop(); save(); renderAll(); };
+
+  exportBtn.onclick = () => {
+    const lines = [`# Yuvarlak Masa — ${state.topic}`, '', `_${new Date().toLocaleString('tr-TR')}_`, ''];
+    if (state.personas.gemini) lines.push(`**Gemini rolü:** ${state.personas.gemini}`, '');
+    if (state.personas.claude) lines.push(`**Claude rolü:** ${state.personas.claude}`, '');
+    lines.push('---', '');
+    state.transcript.forEach((m) => lines.push(`**${NAMES[m.who]}:** ${m.text}`, ''));
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+    const a = Object.assign(document.createElement('a'), {
+      href: URL.createObjectURL(blob),
+      download: `yuvarlak-masa-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.md`,
+    });
+    a.click(); URL.revokeObjectURL(a.href);
+  };
+
+  wordBtn.onclick = async () => {
+    wordBtn.disabled = true; setStatus('Word dosyası hazırlanıyor…');
+    try {
+      const res = await fetch('/api/export', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...state, models }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const blob = await res.blob();
+      const a = Object.assign(document.createElement('a'), {
+        href: URL.createObjectURL(blob),
+        download: `yuvarlak-masa-${new Date().toISOString().slice(0, 10)}.docx`,
+      });
+      a.click(); URL.revokeObjectURL(a.href);
+      setStatus('Word dosyası indirildi.');
+    } catch (err) { setStatus('Word dışa aktarımı başarısız: ' + err.message, true); }
+    refreshButtons();
+  };
+
+  // ----- erişim ayarları -----
+  $('#accessCode').value = access.code; $('#ownGemini').value = access.gemini; $('#ownClaude').value = access.claude;
+  $('#saveAccess').onclick = () => {
+    access = { code: $('#accessCode').value.trim(), gemini: $('#ownGemini').value.trim(), claude: $('#ownClaude').value.trim() };
+    try { localStorage.setItem(ACCESS, JSON.stringify(access)); } catch {}
+    $('#accessNote').textContent = 'Kaydedildi.';
+    setTimeout(() => ($('#accessNote').textContent = ''), 2000);
+  };
+
+  // ----- açılış -----
+  fetch('/api/speak').then((r) => r.json()).then((info) => {
+    models = info.models;
+    $('#models').textContent = `${models.gemini} · ${models.claude}`;
+    if (info.needsCode && !access.code && !access.gemini && !access.claude) {
+      $('#access').open = true;
+      setStatus('Bu masa giriş kodu istiyor: Erişim ayarlarından kodu ya da kendi anahtarını gir.');
+    }
+  }).catch(() => {});
+  if (load()) {
+    $('#topic').value = state.topic;
+    $('#geminiPersona').value = state.personas.gemini;
+    $('#claudePersona').value = state.personas.claude;
+    ready = true; renderAll(); collapseHeader(state.topic);
+    setStatus('Önceki masa geri yüklendi.');
+  }
+  refreshButtons();
+</script>
+</body>
+</html>

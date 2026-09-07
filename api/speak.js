@@ -1,9 +1,11 @@
 import { GoogleGenAI } from '@google/genai';
 import Anthropic from '@anthropic-ai/sdk';
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
 const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-5';
-const MAX_TOKENS = 900;
+const MAX_TOKENS = 900;          // Claude: yalnızca görünür cevap
+const GEMINI_MAX_TOKENS = 4096;  // Gemini: düşünme tokenları da bu bütçeden düşer
+const GEMINI_THINKING = process.env.GEMINI_THINKING || 'low'; // minimal | low | medium | high
 const NAMES = { gemini: 'Gemini', claude: 'Claude', moderator: 'Moderatör' };
 
 function systemPrompt(topic, persona, who) {
@@ -47,9 +49,19 @@ async function* streamGemini({ topic, persona, transcript, key }, signal) {
   const stream = await ai.models.generateContentStream({
     model: GEMINI_MODEL,
     contents,
-    config: { systemInstruction: systemPrompt(topic, persona, 'gemini'), maxOutputTokens: MAX_TOKENS, abortSignal: signal },
+    config: {
+      systemInstruction: systemPrompt(topic, persona, 'gemini'),
+      maxOutputTokens: GEMINI_MAX_TOKENS,
+      thinkingConfig: { thinkingLevel: GEMINI_THINKING },
+      abortSignal: signal,
+    },
   });
-  for await (const chunk of stream) if (chunk.text) yield chunk.text;
+  let finish;
+  for await (const chunk of stream) {
+    if (chunk.text) yield chunk.text;
+    finish = chunk.candidates?.[0]?.finishReason || finish;
+  }
+  if (finish && finish !== 'STOP') yield `\n\n[Gemini cevabı burada kesildi: ${finish}]`;
 }
 
 async function* streamClaude({ topic, persona, transcript, key }, signal) {

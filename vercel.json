@@ -5,6 +5,12 @@
     },
     "api/export.js": {
       "maxDuration": 30
+    },
+    "api/extract.js": {
+      "maxDuration": 30
+    },
+    "api/summarize.js": {
+      "maxDuration": 60
     }
   }
 }

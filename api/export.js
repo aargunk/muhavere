@@ -1,7 +1,7 @@
 import { Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle } from 'docx';
 
-const NAMES = { gemini: 'Gemini', claude: 'Claude', moderator: 'Moderatör' };
-const COLORS = { gemini: '1F5FA8', claude: '2E6B4A', moderator: '16222B' };
+const NAMES = { gemini: 'Gemini', claude: 'Claude', deepseek: 'DeepSeek', moderator: 'Moderatör' };
+const COLORS = { gemini: '1F5FA8', claude: '2E6B4A', deepseek: '6B3FA0', moderator: '16222B' };
 const FONT = 'Calibri';
 
 function p(text, opts = {}) {
@@ -33,7 +33,7 @@ export default async function handler(req, res) {
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = null; } }
   if (!body) return res.status(400).send('Geçersiz istek');
-  const { topic = '', personas = {}, transcript = [], models = {} } = body || {};
+  const { topic = '', personas = {}, transcript = [], models = {}, materialLabel = '' } = body || {};
 
   const date = new Date().toLocaleString('tr-TR', { dateStyle: 'long', timeStyle: 'short', timeZone: 'Europe/Istanbul' });
   const children = [
@@ -41,9 +41,12 @@ export default async function handler(req, res) {
     p(topic, { size: 26, italics: true, spacing: { after: 60 } }),
     p(date, { size: 20, color: '6B7880', spacing: { after: 240 } }),
   ];
-  if (personas.gemini) children.push(p(`Gemini rolü: ${personas.gemini}`, { size: 20, color: '444444' }));
-  if (personas.claude) children.push(p(`Claude rolü: ${personas.claude}`, { size: 20, color: '444444' }));
-  if (models.gemini || models.claude) children.push(p(`Modeller: ${[models.gemini, models.claude].filter(Boolean).join(', ')}`, { size: 20, color: '444444' }));
+  for (const id of ['gemini', 'claude', 'deepseek']) {
+    if (personas[id]) children.push(p(`${NAMES[id]} rolü: ${personas[id]}`, { size: 20, color: '444444' }));
+  }
+  if (materialLabel) children.push(p(`Tartışma materyali: ${materialLabel}`, { size: 20, color: '444444' }));
+  const used = [...new Set(transcript.map((m) => m.who))].filter((id) => models[id]).map((id) => `${NAMES[id]}: ${models[id]}`);
+  if (used.length) children.push(p(`Modeller — ${used.join(', ')}`, { size: 20, color: '444444' }));
   children.push(new Paragraph({
     spacing: { after: 240 },
     border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: 'C9D2D7', space: 4 } },

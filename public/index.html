@@ -15,6 +15,7 @@
     --rule: #c9d2d7;
     --gemini: #1f5fa8;
     --claude: #2e6b4a;
+    --deepseek: #6b3fa0;
     --mod: #16222b;
     --serif: "Newsreader", Georgia, "Times New Roman", serif;
     --sans: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -58,7 +59,7 @@
     outline: 2px solid var(--gemini);
     outline-offset: 1px;
   }
-  .personas { display: grid; gap: 8px; grid-template-columns: 1fr 1fr; }
+  .personas { display: grid; gap: 8px; grid-template-columns: 1fr 1fr 1fr; }
   .personas label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 3px; }
   .personas label b { color: var(--ink); font-weight: 600; }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -69,8 +70,20 @@
   #access { margin-top: 4px; }
   #access summary { cursor: pointer; font-size: 13px; color: var(--muted); padding: 4px 0; }
   #access .personas { margin-top: 8px; }
-  #topicLine { font-family: var(--serif); font-size: 16px; color: var(--muted); font-style: italic; margin-top: 4px; display: none; }
-  header.collapsed #topicLine { display: block; }
+  #topicLine { font-family: var(--serif); font-size: 16px; color: var(--muted); font-style: italic; margin-top: 4px; display: none;
+    overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; cursor: pointer; }
+  header:not(.collapsed) #topicLine { display: none; }
+  #topicLine.open { -webkit-line-clamp: unset; }
+  #matBadge { font-size: 12px; color: var(--muted); background: var(--bg); padding: 2px 8px; border-radius: 10px; margin-left: 8px; white-space: nowrap; }
+  #matBadge[hidden] { display: none; }
+  .material { border: 1px solid var(--rule); border-radius: 4px; padding: 8px 10px; background: #fff; display: grid; gap: 8px; }
+  .material > .row > label { font-size: 12px; color: var(--muted); }
+  .material .src { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; }
+  .material .src button { padding: 8px 12px; font-size: 13px; }
+  #matInfo { font-size: 12px; color: var(--muted); }
+  #matInfo.err { color: #9b2c2c; }
+  #material { min-height: 60px; max-height: 160px; font-size: 13px; }
+  header.collapsed #topicLine { display: -webkit-box; }
 
   /* ---------- Orta: transkript ---------- */
   main { overflow-y: auto; padding: 24px 20px 32px; }
@@ -108,6 +121,7 @@
   }
   .msg[data-who="gemini"] .who { color: var(--gemini); }
   .msg[data-who="claude"] .who { color: var(--claude); }
+  .msg[data-who="deepseek"] .who { color: var(--deepseek); }
   .msg[data-who="moderator"] .who { color: var(--mod); }
   .msg[data-who="moderator"] .who::after { content: " ▸"; opacity: .5; }
   .text {
@@ -139,7 +153,8 @@
     position: sticky; bottom: 0;
   }
   .podium { max-width: 780px; margin: 0 auto; display: grid; gap: 8px; }
-  .turns { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; }
+  .turns { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 8px; }
+  button[data-who][hidden] { display: none; }
   button {
     font: 500 14px/1 var(--sans);
     padding: 11px 14px;
@@ -152,8 +167,10 @@
   button:disabled { opacity: .45; cursor: not-allowed; }
   button.speak-gemini { border-color: var(--gemini); color: var(--gemini); }
   button.speak-claude { border-color: var(--claude); color: var(--claude); }
+  button.speak-deepseek { border-color: var(--deepseek); color: var(--deepseek); }
   button.speak-gemini:not(:disabled):hover { background: var(--gemini); color: #fff; }
   button.speak-claude:not(:disabled):hover { background: var(--claude); color: #fff; }
+  button.speak-deepseek:not(:disabled):hover { background: var(--deepseek); color: #fff; }
   button.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
   button.danger { color: #9b2c2c; border-color: #d9b4b4; }
   .modline { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
@@ -178,7 +195,7 @@
     .msg { grid-template-columns: 1fr; gap: 4px; }
     .who { font-size: 14px; }
     .text { font-size: 16.5px; }
-    .turns { grid-template-columns: 1fr 1fr; }
+    .turns { grid-template-columns: 1fr 1fr 1fr; }
     .turns .stop { grid-column: 1 / -1; }
   }
 </style>
@@ -188,12 +205,27 @@
 <header id="header">
   <div class="row">
     <h1>Yuvarlak Masa</h1>
-    <span id="models"></span>
+    <span id="models"></span><span id="matBadge" hidden></span>
     <button id="toggleSetup" type="button" hidden>Kurulumu göster</button>
   </div>
-  <div id="topicLine"></div>
+  <div id="topicLine" title="Tamamını görmek için tıkla"></div>
   <div id="setup">
-    <textarea id="topic" rows="2" placeholder="Tartışma konusu — moderatörün açılış sorusu olarak masaya konur"></textarea>
+    <input id="topic" placeholder="Açılış sorusu — kısa ve net; moderatörün ilk sözü olarak masaya konur">
+    <div class="material">
+      <div class="row"><label><b>Tartışma materyali</b> (isteğe bağlı) — bir belge, haber, rapor: yapıştır, linkten getir ya da dosya yükle</label></div>
+      <div class="src">
+        <input id="matUrl" placeholder="https://… (haber, sayfa veya PDF linki)">
+        <button id="matFetch" type="button">Linkten getir</button>
+        <button id="matFileBtn" type="button">Dosya yükle</button>
+        <input id="matFile" type="file" accept=".pdf,.docx,.txt,.md,.html" hidden>
+      </div>
+      <textarea id="material" placeholder="…ya da metni doğrudan buraya yapıştır"></textarea>
+      <div class="row">
+        <span id="matInfo"></span>
+        <button id="matSummarize" type="button" class="primary" style="margin-left:auto;padding:6px 10px;font-size:12px" hidden>Özetle (önerilir)</button>
+        <button id="matClear" type="button" style="padding:5px 9px;font-size:12px">Temizle</button>
+      </div>
+    </div>
     <div class="personas">
       <div>
         <label><b>Gemini</b> rolü</label>
@@ -202,6 +234,10 @@
       <div>
         <label><b>Claude</b> rolü</label>
         <textarea id="claudePersona" rows="3" placeholder="Örn. Şüpheci bir eğitim sosyoloğu. Karşı örnekler arar, ölçme sorunlarını vurgular."></textarea>
+      </div>
+      <div id="deepseekPersonaBox">
+        <label><b>DeepSeek</b> rolü</label>
+        <textarea id="deepseekPersona" rows="3" placeholder="Örn. Pragmatik bir üniversite yöneticisi. Maliyet ve uygulanabilirlik sorar."></textarea>
       </div>
     </div>
     <div class="row">
@@ -224,6 +260,10 @@
           <input id="ownClaude" type="password" autocomplete="off" placeholder="sk-ant-…">
         </div>
         <div>
+          <label>Kendi DeepSeek API anahtarın <span class="empty-note">(isteğe bağlı)</span></label>
+          <input id="ownDeepseek" type="password" autocomplete="off" placeholder="sk-…">
+        </div>
+        <div>
           <label>&nbsp;</label>
           <button id="saveAccess" type="button">Kaydet</button>
           <span id="accessNote" class="empty-note"></span>
@@ -241,6 +281,7 @@
     <div class="turns">
       <button class="speak-gemini" data-who="gemini" type="button" disabled>Gemini konuşsun</button>
       <button class="speak-claude" data-who="claude" type="button" disabled>Claude konuşsun</button>
+      <button class="speak-deepseek" data-who="deepseek" type="button" disabled>DeepSeek konuşsun</button>
       <button id="stopBtn" class="stop danger" type="button" disabled>Kes</button>
     </div>
     <div class="modline">
@@ -258,7 +299,8 @@
 
 <script>
   const $ = (s) => document.querySelector(s);
-  const NAMES = { gemini: 'Gemini', claude: 'Claude', moderator: 'Moderatör' };
+  const NAMES = { gemini: 'Gemini', claude: 'Claude', deepseek: 'DeepSeek', moderator: 'Moderatör' };
+  const AI_IDS = ['gemini', 'claude', 'deepseek'];
   const STORE = 'yuvarlak-masa-v2';
 
   const header = $('#header'), transcriptEl = $('#transcript'), main = document.querySelector('main');
@@ -266,11 +308,13 @@
   const stopBtn = $('#stopBtn'), modBtn = $('#modBtn'), modText = $('#modText');
   const undoBtn = $('#undoBtn'), exportBtn = $('#exportBtn'), wordBtn = $('#wordBtn'), statusEl = $('#status');
   const ACCESS = 'yuvarlak-masa-access';
-  let access = { code: '', gemini: '', claude: '' };
-  let models = {};
+  let access = { code: '', gemini: '', claude: '', deepseek: '' };
+  let models = {}, configured = {};
+  const available = (id) => Boolean(configured[id] || access[id]);
+  const activeParticipants = () => AI_IDS.filter(available);
   try { access = { ...access, ...JSON.parse(localStorage.getItem(ACCESS) || '{}') }; } catch {}
 
-  let state = { topic: '', personas: { gemini: '', claude: '' }, transcript: [] };
+  let state = { topic: '', personas: { gemini: '', claude: '', deepseek: '' }, transcript: [], material: '', materialLabel: '' };
   let ready = false, busy = false, abort = null;
 
   // ----- kalıcılık -----
@@ -283,7 +327,7 @@
   // ----- durum & butonlar -----
   function setStatus(text, isErr = false) { statusEl.textContent = text; statusEl.classList.toggle('err', isErr); }
   function refreshButtons() {
-    speakBtns.forEach((b) => (b.disabled = !ready || busy));
+    speakBtns.forEach((b) => { b.disabled = !ready || busy || !available(b.dataset.who); b.title = available(b.dataset.who) ? '' : 'Bu model için anahtar tanımlı değil'; });
     stopBtn.disabled = !busy;
     modBtn.disabled = !ready || busy;
     undoBtn.disabled = !ready || busy || state.transcript.length <= 1;
@@ -307,6 +351,10 @@
   function renderAll() { transcriptEl.innerHTML = ''; state.transcript.forEach((m) => renderMsg(m)); refreshButtons(); }
   function collapseHeader(topic) {
     $('#topicLine').textContent = topic;
+    $('#topicLine').classList.remove('open');
+    const badge = $('#matBadge');
+    badge.hidden = !state.material;
+    badge.textContent = state.material ? `materyal: ${state.material.length.toLocaleString('tr-TR')} karakter` : '';
     header.classList.add('collapsed');
     $('#toggleSetup').hidden = false;
     $('#toggleSetup').textContent = 'Kurulumu göster';
@@ -318,12 +366,15 @@
     if (!topic) { setStatus('Bir konu yazmadan masa kurulmaz.', true); $('#topic').focus(); return; }
     state = {
       topic,
-      personas: { gemini: $('#geminiPersona').value.trim(), claude: $('#claudePersona').value.trim() },
+      personas: { gemini: $('#geminiPersona').value.trim(), claude: $('#claudePersona').value.trim(), deepseek: $('#deepseekPersona').value.trim() },
       transcript: [{ who: 'moderator', text: topic, ts: Date.now() }],
+      material: $('#material').value.trim(),
+      materialLabel: $('#material').value.trim() ? (matLabel || 'yapıştırılan metin') : '',
     };
     ready = true; save(); renderAll(); collapseHeader(topic);
     setStatus('Masa kuruldu. Söz kimde?');
   };
+  $('#topicLine').onclick = () => $('#topicLine').classList.toggle('open');
   $('#toggleSetup').onclick = () => {
     const c = header.classList.toggle('collapsed');
     $('#toggleSetup').textContent = c ? 'Kurulumu göster' : 'Kurulumu gizle';
@@ -341,7 +392,8 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-access-code': access.code || '' },
         body: JSON.stringify({ who, topic: state.topic, persona: state.personas[who], transcript: state.transcript,
-          keys: { gemini: access.gemini, claude: access.claude } }),
+          keys: { gemini: access.gemini, claude: access.claude, deepseek: access.deepseek }, participants: activeParticipants(),
+          material: state.material || '' }),
         signal: abort.signal,
       });
       if (!res.ok) throw new Error(await res.text());
@@ -390,8 +442,8 @@
 
   exportBtn.onclick = () => {
     const lines = [`# Yuvarlak Masa — ${state.topic}`, '', `_${new Date().toLocaleString('tr-TR')}_`, ''];
-    if (state.personas.gemini) lines.push(`**Gemini rolü:** ${state.personas.gemini}`, '');
-    if (state.personas.claude) lines.push(`**Claude rolü:** ${state.personas.claude}`, '');
+    AI_IDS.forEach((id) => { if (state.personas[id]) lines.push(`**${NAMES[id]} rolü:** ${state.personas[id]}`, ''); });
+    if (state.materialLabel) lines.push(`**Tartışma materyali:** ${state.materialLabel}`, '');
     lines.push('---', '');
     state.transcript.forEach((m) => lines.push(`**${NAMES[m.who]}:** ${m.text}`, ''));
     const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
@@ -407,7 +459,7 @@
     try {
       const res = await fetch('/api/export', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...state, models }),
+        body: JSON.stringify({ topic: state.topic, personas: state.personas, transcript: state.transcript, materialLabel: state.materialLabel, models }),
       });
       if (!res.ok) throw new Error(await res.text());
       const blob = await res.blob();
@@ -421,10 +473,64 @@
     refreshButtons();
   };
 
+  // ----- materyal: link / dosya -----
+  let matLabel = '';
+  const matInfo = (t, err = false) => { $('#matInfo').textContent = t; $('#matInfo').classList.toggle('err', err); };
+  const SUMMARIZE_AT = 6000;
+  let matSummarized = false;
+  function updateSummarizeBtn() {
+    const n = $('#material').value.length;
+    $('#matSummarize').hidden = matSummarized || n < SUMMARIZE_AT;
+  }
+  function setMaterial(text, label, summarized = false) {
+    $('#material').value = text; matLabel = label; matSummarized = summarized;
+    matInfo(`${label} — ${text.length.toLocaleString('tr-TR')} karakter` + (!summarized && text.length >= SUMMARIZE_AT ? ' · uzun; özetleyip masaya koymak daha verimli' : ''));
+    updateSummarizeBtn();
+  }
+  $('#matSummarize').onclick = async () => {
+    const text = $('#material').value.trim(); if (!text) return;
+    const origLen = text.length, origLabel = matLabel || 'yapıştırılan metin';
+    $('#matSummarize').disabled = true; matInfo('Özetleniyor… (15-40 sn)');
+    try {
+      const res = await fetch('/api/summarize', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-access-code': access.code || '' },
+        body: JSON.stringify({ text, keys: { gemini: access.gemini, claude: access.claude, deepseek: access.deepseek } }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const d = await res.json();
+      setMaterial(d.summary, `${origLabel} (özet, ${NAMES[d.by]}; orijinal ${origLen.toLocaleString('tr-TR')} karakter)`, true);
+    } catch (err) { matInfo(err.message, true); }
+    $('#matSummarize').disabled = false;
+  };
+  $('#material').addEventListener('input', () => { matLabel = ''; matSummarized = false; matInfo($('#material').value ? `${$('#material').value.length.toLocaleString('tr-TR')} karakter` : ''); updateSummarizeBtn(); });
+  $('#matClear').onclick = () => { $('#material').value = ''; $('#matUrl').value = ''; matLabel = ''; matSummarized = false; matInfo(''); updateSummarizeBtn(); };
+  async function extract(payload, busyText) {
+    matInfo(busyText); $('#matFetch').disabled = $('#matFileBtn').disabled = true;
+    try {
+      const res = await fetch('/api/extract', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!res.ok) throw new Error(await res.text());
+      const d = await res.json();
+      setMaterial(d.text, d.label);
+      if (d.truncated) matInfo($('#matInfo').textContent + ' (uzun belge, kırpıldı)');
+    } catch (err) { matInfo(err.message, true); }
+    $('#matFetch').disabled = $('#matFileBtn').disabled = false;
+  }
+  $('#matFetch').onclick = () => { const url = $('#matUrl').value.trim(); if (url) extract({ url }, 'Link getiriliyor…'); };
+  $('#matFileBtn').onclick = () => $('#matFile').click();
+  $('#matFile').onchange = () => {
+    const f = $('#matFile').files[0]; if (!f) return;
+    if (f.size > 4 * 1024 * 1024) return matInfo('Dosya 4 MB sınırını aşıyor.', true);
+    const r = new FileReader();
+    r.onload = () => extract({ name: f.name, base64: r.result.split(',')[1] }, `${f.name} okunuyor…`);
+    r.readAsDataURL(f);
+    $('#matFile').value = '';
+  };
+
   // ----- erişim ayarları -----
-  $('#accessCode').value = access.code; $('#ownGemini').value = access.gemini; $('#ownClaude').value = access.claude;
+  $('#accessCode').value = access.code; $('#ownGemini').value = access.gemini; $('#ownClaude').value = access.claude; $('#ownDeepseek').value = access.deepseek || '';
   $('#saveAccess').onclick = () => {
-    access = { code: $('#accessCode').value.trim(), gemini: $('#ownGemini').value.trim(), claude: $('#ownClaude').value.trim() };
+    access = { code: $('#accessCode').value.trim(), gemini: $('#ownGemini').value.trim(), claude: $('#ownClaude').value.trim(), deepseek: $('#ownDeepseek').value.trim() };
+    refreshButtons();
     try { localStorage.setItem(ACCESS, JSON.stringify(access)); } catch {}
     $('#accessNote').textContent = 'Kaydedildi.';
     setTimeout(() => ($('#accessNote').textContent = ''), 2000);
@@ -432,8 +538,9 @@
 
   // ----- açılış -----
   fetch('/api/speak').then((r) => r.json()).then((info) => {
-    models = info.models;
-    $('#models').textContent = `${models.gemini} · ${models.claude}`;
+    models = info.models; configured = info.configured || {};
+    $('#models').textContent = AI_IDS.filter(available).map((id) => models[id]).join(' · ');
+    refreshButtons();
     if (info.needsCode && !access.code && !access.gemini && !access.claude) {
       $('#access').open = true;
       setStatus('Bu masa giriş kodu istiyor: Erişim ayarlarından kodu ya da kendi anahtarını gir.');
@@ -443,6 +550,8 @@
     $('#topic').value = state.topic;
     $('#geminiPersona').value = state.personas.gemini;
     $('#claudePersona').value = state.personas.claude;
+    $('#deepseekPersona').value = state.personas.deepseek || '';
+    if (state.material) setMaterial(state.material, state.materialLabel || 'kayıtlı materyal', /\(özet/.test(state.materialLabel || ''));
     ready = true; renderAll(); collapseHeader(state.topic);
     setStatus('Önceki masa geri yüklendi.');
   }
